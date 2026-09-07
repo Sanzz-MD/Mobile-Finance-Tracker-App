@@ -8,6 +8,8 @@ import {
   loginWithGoogle,
   logoutFirebase,
   subscribeAuthState,
+  getFirebaseUserProfile,
+  updateFirebaseUserProfile,
   getFirebaseUserTransactions,
   saveFirebaseTransaction,
   deleteFirebaseTransaction,
@@ -3690,13 +3692,16 @@ function AuthModal({
     try {
       const user = await loginWithGoogle();
       if (user) {
+        const profile = await getFirebaseUserProfile(user.uid);
         onSuccess({
           id: user.uid,
-          email: user.email || "",
-          fullName: user.displayName || user.email?.split("@")[0] || "User",
-          currency: "IDR",
+          email: user.email || profile?.email || "",
+          fullName: profile?.fullName || user.displayName || user.email?.split("@")[0] || "User",
+          currency: profile?.currency || "IDR",
+          avatarUrl: profile?.avatarUrl || user.photoURL || undefined,
+          coverUrl: profile?.coverUrl || undefined,
         });
-        onShowToast(`Selamat datang, ${user.displayName || "User"}! (Google Sign-In) 🚀`, "success");
+        onShowToast(`Selamat datang, ${profile?.fullName || user.displayName || "User"}! (Google Sign-In) 🚀`, "success");
       }
     } catch (err: any) {
       console.error("Google Auth error:", err);
@@ -3738,13 +3743,16 @@ function AuthModal({
       } else {
         const user = await loginWithEmail(email.trim(), password);
         if (user) {
+          const profile = await getFirebaseUserProfile(user.uid);
           onSuccess({
             id: user.uid,
-            email: user.email || "",
-            fullName: user.displayName || user.email?.split("@")[0] || "User",
-            currency: "IDR",
+            email: user.email || profile?.email || "",
+            fullName: profile?.fullName || user.displayName || user.email?.split("@")[0] || "User",
+            currency: profile?.currency || "IDR",
+            avatarUrl: profile?.avatarUrl || undefined,
+            coverUrl: profile?.coverUrl || undefined,
           });
-          onShowToast(`Selamat datang kembali, ${user.displayName || "User"}! 🔥`, "success");
+          onShowToast(`Selamat datang kembali, ${profile?.fullName || user.displayName || "User"}! 🔥`, "success");
           setLoading(false);
           return;
         }
@@ -7552,8 +7560,12 @@ Petunjuk Jawaban:
               {/* Drawer Footer Profile & Settings */}
               <div className="p-3 border-t border-slate-300/80 dark:border-white/5 flex items-center justify-between bg-slate-200/40 dark:bg-transparent">
                 <div className="flex items-center gap-2 truncate">
-                  <div className="w-7 h-7 rounded-full bg-violet-200 dark:bg-white/10 flex items-center justify-center text-xs font-semibold text-violet-800 dark:text-white flex-shrink-0">
-                    {currentUser?.fullName?.charAt(0) || "M"}
+                  <div className="w-7 h-7 rounded-full bg-violet-200 dark:bg-white/10 flex items-center justify-center text-xs font-semibold text-violet-800 dark:text-white flex-shrink-0 overflow-hidden">
+                    {currentUser?.avatarUrl ? (
+                      <img src={currentUser.avatarUrl} alt={currentUser.fullName} className="w-full h-full object-cover" />
+                    ) : (
+                      currentUser?.fullName?.charAt(0) || "M"
+                    )}
                   </div>
                   <div className="truncate">
                     <p className="text-xs font-medium text-slate-900 dark:text-white truncate">{currentUser?.fullName || "M.Ikhsan C.P"}</p>
@@ -8185,14 +8197,19 @@ export default function App() {
 
   // Firebase Auth State Observer
   useEffect(() => {
-    const unsubscribe = subscribeAuthState((fbUser) => {
+    const unsubscribe = subscribeAuthState(async (fbUser) => {
       if (fbUser) {
-        setCurrentUser({
+        const profile = await getFirebaseUserProfile(fbUser.uid);
+        const newUser: User = {
           id: fbUser.uid,
-          email: fbUser.email || "",
-          fullName: fbUser.displayName || fbUser.email?.split("@")[0] || "User",
-          currency: "IDR",
-        });
+          email: fbUser.email || profile?.email || "",
+          fullName: profile?.fullName || fbUser.displayName || fbUser.email?.split("@")[0] || "User",
+          currency: profile?.currency || "IDR",
+          avatarUrl: profile?.avatarUrl || fbUser.photoURL || undefined,
+          coverUrl: profile?.coverUrl || undefined,
+        };
+        setCurrentUser(newUser);
+        localStorage.setItem("mft_user", JSON.stringify(newUser));
       }
     });
     return () => unsubscribe();
@@ -8204,14 +8221,30 @@ export default function App() {
     setIsSyncing(true);
     try {
       // 1. Try Firestore Cloud sync
-      const [fsTxs, fsBgs, fsScs] = await Promise.all([
+      const [fsTxs, fsBgs, fsScs, fsProfile] = await Promise.all([
         getFirebaseUserTransactions(currentUser.id).catch(() => null),
         getFirebaseUserBudgets(currentUser.id).catch(() => null),
         getFirebaseUserSchedules(currentUser.id).catch(() => null),
+        getFirebaseUserProfile(currentUser.id).catch(() => null),
       ]);
 
       // Firestore connected successfully — mark active regardless of data count
       setApiConnected(true);
+
+      if (fsProfile) {
+        setCurrentUser((prev) => {
+          if (!prev) return prev;
+          const updatedUser: User = {
+            ...prev,
+            fullName: fsProfile.fullName || prev.fullName,
+            currency: fsProfile.currency || prev.currency,
+            avatarUrl: fsProfile.avatarUrl !== undefined ? (fsProfile.avatarUrl || undefined) : prev.avatarUrl,
+            coverUrl: fsProfile.coverUrl !== undefined ? (fsProfile.coverUrl || undefined) : prev.coverUrl,
+          };
+          localStorage.setItem("mft_user", JSON.stringify(updatedUser));
+          return updatedUser;
+        });
+      }
 
       if (fsTxs && Array.isArray(fsTxs) && fsTxs.length > 0) {
         setTransactions(fsTxs as Transaction[]);
@@ -8601,9 +8634,21 @@ export default function App() {
               language={language}
               onLanguageChange={handleLanguageChange}
               onOpenInstallModal={() => setShowInstallModal(true)}
-              onUpdateUser={(updated) => {
+              onUpdateUser={async (updated) => {
                 setCurrentUser(updated);
                 localStorage.setItem("mft_user", JSON.stringify(updated));
+                try {
+                  await updateFirebaseUserProfile(updated.id, {
+                    fullName: updated.fullName,
+                    email: updated.email,
+                    currency: updated.currency,
+                    avatarUrl: updated.avatarUrl || "",
+                    coverUrl: updated.coverUrl || "",
+                  });
+                  showToast("Profil tersimpan persisten ke Cloud Firestore! ✨", "success");
+                } catch (err) {
+                  console.error("Failed to update profile in Firestore:", err);
+                }
               }}
               onImportData={handleImportData}
               darkMode={darkMode}

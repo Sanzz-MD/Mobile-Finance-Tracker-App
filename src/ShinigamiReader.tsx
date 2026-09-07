@@ -62,6 +62,16 @@ export default function ShinigamiReader({ onShowToast, onCloseModal }: Shinigami
   const [readerTheme, setReaderTheme] = useState<"dark" | "black" | "sepia">("dark");
   const [zoomLevel, setZoomLevel] = useState<number>(100);
   const [showReaderHeader, setShowReaderHeader] = useState(true);
+  const [autoScrollEnabled, setAutoScrollEnabled] = useState(false);
+  const [autoScrollSpeed, setAutoScrollSpeed] = useState<number>(1);
+
+  const safeZoomWidth = `${Math.min(180, Math.max(70, zoomLevel))}%`;
+  const autoScrollOptions = [
+    { value: 0.75, label: "Slow 0.75x" },
+    { value: 1, label: "Normal 1x" },
+    { value: 1.5, label: "Fast 1.5x" },
+    { value: 2.5, label: "Turbo 2.5x" },
+  ];
 
   // Saved Bookmarks / History (localStorage)
   const [bookmarks, setBookmarks] = useState<SavedBookmark[]>(() => {
@@ -95,6 +105,38 @@ export default function ShinigamiReader({ onShowToast, onCloseModal }: Shinigami
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isFullscreenReader]);
+
+  useEffect(() => {
+    if (!isFullscreenReader || !autoScrollEnabled || readerMode !== "webtoon") return;
+
+    let rafId = 0;
+    let previousTime = 0;
+
+    const tick = (timestamp: number) => {
+      if (!readerContainerRef.current) return;
+
+      const delta = previousTime ? timestamp - previousTime : 16;
+      previousTime = timestamp;
+      const scrollStep = autoScrollSpeed * delta * 0.18;
+
+      const reader = readerContainerRef.current;
+      const nextScrollTop = reader.scrollTop + scrollStep;
+      const maxScrollTop = reader.scrollHeight - reader.clientHeight;
+
+      if (nextScrollTop >= maxScrollTop - 2) {
+        reader.scrollTop = maxScrollTop;
+        setAutoScrollEnabled(false);
+        return;
+      }
+
+      reader.scrollTop = nextScrollTop;
+      rafId = window.requestAnimationFrame(tick);
+    };
+
+    rafId = window.requestAnimationFrame(tick);
+
+    return () => window.cancelAnimationFrame(rafId);
+  }, [autoScrollEnabled, autoScrollSpeed, isFullscreenReader, readerMode]);
 
   // Load Manga List based on Active Tab & Filters
   useEffect(() => {
@@ -890,7 +932,10 @@ export default function ShinigamiReader({ onShowToast, onCloseModal }: Shinigami
               {/* Reader Mode Toggle (Webtoon vs Paged) */}
               <div className="hidden sm:flex items-center gap-1 bg-white/10 p-1 rounded-xl border border-white/10">
                 <button
-                  onClick={() => setReaderMode("webtoon")}
+                  onClick={() => {
+                    setReaderMode("webtoon");
+                    setAutoScrollEnabled(false);
+                  }}
                   className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all ${
                     readerMode === "webtoon" ? "bg-rose-500 text-white" : "text-white/60 hover:text-white"
                   }`}
@@ -899,7 +944,10 @@ export default function ShinigamiReader({ onShowToast, onCloseModal }: Shinigami
                   📜 Webtoon
                 </button>
                 <button
-                  onClick={() => setReaderMode("paged")}
+                  onClick={() => {
+                    setReaderMode("paged");
+                    setAutoScrollEnabled(false);
+                  }}
                   className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all ${
                     readerMode === "paged" ? "bg-rose-500 text-white" : "text-white/60 hover:text-white"
                   }`}
@@ -907,6 +955,37 @@ export default function ShinigamiReader({ onShowToast, onCloseModal }: Shinigami
                 >
                   📖 Per Halaman
                 </button>
+              </div>
+
+              {/* Auto-scroll Controls */}
+              <div className="hidden sm:flex items-center gap-2 bg-white/10 p-1 rounded-xl border border-white/10">
+                <button
+                  onClick={() => {
+                    if (readerMode !== "webtoon") {
+                      setReaderMode("webtoon");
+                    }
+                    setAutoScrollEnabled((prev) => !prev);
+                  }}
+                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all ${
+                    autoScrollEnabled ? "bg-amber-500 text-slate-950" : "text-white/70 hover:text-white"
+                  }`}
+                  title="Auto-scroll reader"
+                >
+                  {autoScrollEnabled ? "⏸ Auto" : "▶ Auto"}
+                </button>
+                <select
+                  value={String(autoScrollSpeed)}
+                  onChange={(e) => setAutoScrollSpeed(Number(e.target.value))}
+                  disabled={readerMode !== "webtoon"}
+                  className="bg-slate-900/80 text-white text-[10px] rounded-lg px-2 py-1 border border-white/10 outline-none disabled:opacity-50"
+                  title="Autoscroll speed"
+                >
+                  {autoScrollOptions.map((option) => (
+                    <option key={option.label} value={String(option.value)}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               {/* Theme Selector */}
@@ -979,7 +1058,7 @@ export default function ShinigamiReader({ onShowToast, onCloseModal }: Shinigami
             ) : readerMode === "webtoon" ? (
               <div
                 className="flex flex-col items-center space-y-1 transition-all duration-200 mx-auto"
-                style={{ width: `${zoomLevel}%`, maxWidth: `${Math.min(100, zoomLevel)}%` }}
+                style={{ width: safeZoomWidth }}
               >
                 {readingData.images.map((imgUrl, idx) => (
                   <div key={idx} className="relative w-full max-w-2xl bg-slate-900/40 rounded-sm overflow-hidden min-h-[300px]">
@@ -1004,7 +1083,7 @@ export default function ShinigamiReader({ onShowToast, onCloseModal }: Shinigami
               <div className="my-auto flex flex-col items-center space-y-3">
                 <div
                   className="relative max-w-3xl bg-slate-900/40 rounded-lg overflow-hidden shadow-2xl"
-                  style={{ width: `${zoomLevel}%` }}
+                  style={{ width: safeZoomWidth, maxWidth: "90vw" }}
                 >
                   <img
                     src={readingData.images[currentPageIndex]}

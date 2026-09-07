@@ -155,6 +155,46 @@ export function subscribeAuthState(callback: (user: FirebaseUser | null) => void
   return onAuthStateChanged(_auth, callback);
 }
 
+// ─── Firestore User Profile Sync Helpers ───────────────────────────────────────
+export async function getFirebaseUserProfile(userId: string) {
+  if (!_db) return null;
+  try {
+    const userDocRef = doc(_db, "users", userId);
+    const snap = await getDoc(userDocRef);
+    if (snap.exists()) {
+      return snap.data();
+    }
+  } catch (err) {
+    console.error("[Firebase] Error fetching user profile:", err);
+  }
+  return null;
+}
+
+export async function updateFirebaseUserProfile(
+  userId: string,
+  profileData: {
+    fullName?: string;
+    email?: string;
+    currency?: string;
+    avatarUrl?: string;
+    coverUrl?: string;
+  }
+) {
+  if (!_db) return null;
+  try {
+    const userDocRef = doc(_db, "users", userId);
+    const data = {
+      ...profileData,
+      updatedAt: new Date().toISOString(),
+    };
+    await setDoc(userDocRef, data, { merge: true });
+    return data;
+  } catch (err) {
+    console.error("[Firebase] Error updating user profile:", err);
+    throw err;
+  }
+}
+
 // ─── Firestore Database CRUD Helpers ───────────────────────────────────────────
 export async function getFirebaseUserTransactions(userId: string) {
   if (!_db) return [];
