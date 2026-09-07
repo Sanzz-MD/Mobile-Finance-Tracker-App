@@ -65,7 +65,7 @@ export default function ShinigamiReader({ onShowToast, onCloseModal }: Shinigami
   const [autoScrollEnabled, setAutoScrollEnabled] = useState(false);
   const [autoScrollSpeed, setAutoScrollSpeed] = useState<number>(1);
 
-  const safeZoomWidth = `${Math.min(180, Math.max(70, zoomLevel))}%`;
+  const zoomScale = Number((Math.min(180, Math.max(70, zoomLevel)) / 100).toFixed(2));
   const autoScrollOptions = [
     { value: 0.75, label: "Slow 0.75x" },
     { value: 1, label: "Normal 1x" },
@@ -113,15 +113,15 @@ export default function ShinigamiReader({ onShowToast, onCloseModal }: Shinigami
     let previousTime = 0;
 
     const tick = (timestamp: number) => {
-      if (!readerContainerRef.current) return;
+      if (!readerContainerRef.current || !autoScrollEnabled) return;
 
       const delta = previousTime ? timestamp - previousTime : 16;
       previousTime = timestamp;
-      const scrollStep = autoScrollSpeed * delta * 0.18;
+      const scrollStep = autoScrollSpeed * delta * 0.14;
 
       const reader = readerContainerRef.current;
-      const nextScrollTop = reader.scrollTop + scrollStep;
       const maxScrollTop = reader.scrollHeight - reader.clientHeight;
+      const nextScrollTop = reader.scrollTop + scrollStep;
 
       if (nextScrollTop >= maxScrollTop - 2) {
         reader.scrollTop = maxScrollTop;
@@ -1036,7 +1036,7 @@ export default function ShinigamiReader({ onShowToast, onCloseModal }: Shinigami
           <div
             ref={readerContainerRef}
             onScroll={handleReaderScroll}
-            className="flex-1 overflow-y-auto overflow-x-auto p-2 sm:p-4 flex flex-col items-center tab-scroll space-y-1"
+            className="flex-1 overflow-y-auto overflow-x-hidden p-2 sm:p-4 flex flex-col items-center tab-scroll space-y-2 scroll-smooth reader-scroll"
           >
             {readingLoading ? (
               <div className="my-auto py-24 text-center space-y-4">
@@ -1057,23 +1057,31 @@ export default function ShinigamiReader({ onShowToast, onCloseModal }: Shinigami
               </div>
             ) : readerMode === "webtoon" ? (
               <div
-                className="flex flex-col items-center space-y-1 transition-all duration-200 mx-auto"
-                style={{ width: safeZoomWidth }}
+                className="flex flex-col items-center space-y-2 transition-all duration-200 mx-auto w-full max-w-3xl"
               >
                 {readingData.images.map((imgUrl, idx) => (
-                  <div key={idx} className="relative w-full max-w-2xl bg-slate-900/40 rounded-sm overflow-hidden min-h-[300px]">
-                    <img
-                      src={imgUrl}
-                      alt={`Halaman ${idx + 1}`}
-                      className="w-full h-auto object-contain block mx-auto shadow-lg"
-                      loading="lazy"
-                      onError={(e) => {
-                        // Fallback retry
-                        (e.target as HTMLElement).style.display = "none";
-                      }}
-                    />
-                    <div className="absolute bottom-2 right-2 px-2 py-0.5 rounded text-[9px] font-mono bg-black/60 text-white/60">
-                      {idx + 1} / {readingData.images.length}
+                  <div
+                    key={idx}
+                    className="relative w-full flex justify-center items-start rounded-sm overflow-hidden min-h-[300px]"
+                    style={{
+                      transform: `scale(${zoomScale})`,
+                      transformOrigin: 'center top',
+                      transition: 'transform 200ms ease-out',
+                    }}
+                  >
+                    <div className="relative w-full max-w-2xl bg-slate-900/40 shadow-lg">
+                      <img
+                        src={imgUrl}
+                        alt={`Halaman ${idx + 1}`}
+                        className="w-full h-auto object-contain block mx-auto"
+                        loading="lazy"
+                        onError={(e) => {
+                          (e.target as HTMLElement).style.display = "none";
+                        }}
+                      />
+                      <div className="absolute bottom-2 right-2 px-2 py-0.5 rounded text-[9px] font-mono bg-black/60 text-white/60">
+                        {idx + 1} / {readingData.images.length}
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -1083,12 +1091,18 @@ export default function ShinigamiReader({ onShowToast, onCloseModal }: Shinigami
               <div className="my-auto flex flex-col items-center space-y-3">
                 <div
                   className="relative max-w-3xl bg-slate-900/40 rounded-lg overflow-hidden shadow-2xl"
-                  style={{ width: safeZoomWidth, maxWidth: "90vw" }}
+                  style={{
+                    width: "100%",
+                    maxWidth: "90vw",
+                    transform: `scale(${zoomScale})`,
+                    transformOrigin: 'center center',
+                    transition: 'transform 200ms ease-out',
+                  }}
                 >
                   <img
                     src={readingData.images[currentPageIndex]}
                     alt={`Halaman ${currentPageIndex + 1}`}
-                    className="w-full h-auto object-contain max-h-[80vh] mx-auto"
+                    className="w-full h-auto object-contain max-h-[80vh] mx-auto block"
                   />
                   <span className="absolute bottom-3 right-3 px-3 py-1 rounded-xl text-xs font-mono font-bold bg-black/80 text-rose-300 backdrop-blur-md">
                     {currentPageIndex + 1} / {readingData.images.length}
