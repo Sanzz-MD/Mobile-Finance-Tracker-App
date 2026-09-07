@@ -60,12 +60,10 @@ export default function ShinigamiReader({ onShowToast, onCloseModal }: Shinigami
   const [readerMode, setReaderMode] = useState<"webtoon" | "paged">("webtoon");
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
   const [readerTheme, setReaderTheme] = useState<"dark" | "black" | "sepia">("dark");
-  const [zoomLevel, setZoomLevel] = useState<number>(100);
   const [showReaderHeader, setShowReaderHeader] = useState(true);
   const [autoScrollEnabled, setAutoScrollEnabled] = useState(false);
   const [autoScrollSpeed, setAutoScrollSpeed] = useState<number>(1);
 
-  const zoomScale = Number((Math.min(180, Math.max(70, zoomLevel)) / 100).toFixed(2));
   const autoScrollOptions = [
     { value: 0.75, label: "Slow 0.75x" },
     { value: 1, label: "Normal 1x" },
@@ -1013,22 +1011,6 @@ export default function ShinigamiReader({ onShowToast, onCloseModal }: Shinigami
                 />
               </div>
 
-              {/* Zoom controls */}
-              <div className="hidden sm:flex items-center gap-1">
-                <button
-                  onClick={() => setZoomLevel((z) => Math.max(70, z - 15))}
-                  className="w-8 h-8 rounded-xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center text-xs"
-                >
-                  -
-                </button>
-                <span className="text-[10px] font-mono text-white/70 w-8 text-center">{zoomLevel}%</span>
-                <button
-                  onClick={() => setZoomLevel((z) => Math.min(160, z + 15))}
-                  className="w-8 h-8 rounded-xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center text-xs"
-                >
-                  +
-                </button>
-              </div>
             </div>
           </div>
 
@@ -1063,11 +1045,6 @@ export default function ShinigamiReader({ onShowToast, onCloseModal }: Shinigami
                   <div
                     key={idx}
                     className="relative w-full flex justify-center items-start rounded-sm overflow-hidden min-h-[300px]"
-                    style={{
-                      transform: `scale(${zoomScale})`,
-                      transformOrigin: 'center top',
-                      transition: 'transform 200ms ease-out',
-                    }}
                   >
                     <div className="relative w-full max-w-2xl bg-slate-900/40 shadow-lg">
                       <img
@@ -1091,13 +1068,7 @@ export default function ShinigamiReader({ onShowToast, onCloseModal }: Shinigami
               <div className="my-auto flex flex-col items-center space-y-3">
                 <div
                   className="relative max-w-3xl bg-slate-900/40 rounded-lg overflow-hidden shadow-2xl"
-                  style={{
-                    width: "100%",
-                    maxWidth: "90vw",
-                    transform: `scale(${zoomScale})`,
-                    transformOrigin: 'center center',
-                    transition: 'transform 200ms ease-out',
-                  }}
+                  style={{ width: "100%", maxWidth: "90vw" }}
                 >
                   <img
                     src={readingData.images[currentPageIndex]}
